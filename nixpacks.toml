@@ -1,7 +1,0 @@
-# nixpacks.toml (เวอร์ชันแก้ไขที่ถูกต้อง)
-
-[phases.install]
-cmds = [
-    "python -m pip install --upgrade pip",
-    "python -m pip install -r requirements.txt"
-]

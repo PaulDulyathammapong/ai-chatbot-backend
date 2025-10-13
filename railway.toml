@@ -1,9 +1,0 @@
-[build]
-builder = "NIXPACKS"
-nixpacksConfigPath = "nixpacks.toml"
-
-[deploy]
-# คำสั่งสำหรับเริ่มเซิร์ฟเวอร์ (ที่แก้ไขแล้ว)
-startCommand = "python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
-healthcheckPath = "/"
-healthcheckTimeout = 100
