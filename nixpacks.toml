@@ -1,8 +1,5 @@
-# ระบุเวอร์ชัน Python
-[providers]
-python = "3.11"
+# nixpacks.toml (เวอร์ชันแก้ไขที่ถูกต้อง)
 
-# ขั้นตอนการติดตั้ง
 [phases.install]
 cmds = [
     "python -m pip install --upgrade pip",
