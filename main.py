@@ -1,15 +1,14 @@
-# main.py (ฉบับ Final Version พร้อม CORS)
+# main.py (ฉบับสุดท้ายที่สมบูรณ์แบบ)
 import os
 import json
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
-from fastapi.middleware.cors import CORSMiddleware  # <-- ส่วนที่ import เพิ่มเข้ามา
+from fastapi.middleware.cors import CORSMiddleware  # Import CORS
 
 from models import UserQuery, ApiResponse, ReelData, ContentCard, CtaButton
 from rag_system import setup_database, add_reel_to_db, query_vector_db
 import google.generativeai as genai
 
-# --- Lifespan Event ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Startup event: Application is starting up.")
@@ -35,7 +34,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# --- ส่วนที่เพิ่มเข้ามาสำหรับ CORS ---
+# --- เพิ่มส่วนนี้เพื่อบอก "ยาม" ให้รับสาย ---
 origins = [
     "https://paulai.site",
     "http://paulai.site",
@@ -52,7 +51,6 @@ app.add_middleware(
 )
 # ------------------------------------
 
-# --- โค้ดส่วนที่เหลือเหมือนเดิม ---
 try:
     genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 except KeyError:
