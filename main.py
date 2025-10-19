@@ -1,4 +1,4 @@
-# main.py (Final Version - Corrected Syntax)
+# main.py (Final Version)
 import os
 import json
 from fastapi import FastAPI, HTTPException
@@ -7,14 +7,12 @@ from models import UserQuery, ApiResponse, ReelData, ContentCard, CtaButton
 from rag_system import setup_database, add_reel_to_db, query_vector_db
 import google.generativeai as genai
 
-# --- ???????? FastAPI App ????????? ---
 app = FastAPI(
     title="AI Chatbot Backend",
     description="The Hub for connecting Frontend, RAG, and Gemini Pro.",
     version="1.0.0",
 )
 
-# --- ??????? Google AI ---
 try:
     genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 except KeyError:
@@ -22,7 +20,6 @@ except KeyError:
 
 generation_config = {"temperature": 0.7}
 
-# --- ?????????????????????? (??? """ ???????) ---
 SYSTEM_INSTRUCTION = """
 You are an expert content curator and a friendly, engaging storyteller. Your primary goal is to make users feel excited and curious about content they've requested, encouraging them to click and watch it on Facebook.
 **CONTEXT:**
@@ -41,7 +38,6 @@ model = genai.GenerativeModel(
     system_instruction=SYSTEM_INSTRUCTION
 )
 
-# --- API Endpoints ---
 @app.get("/")
 def read_root():
     return {"Status": "OK", "Message": "Welcome to the AI Chatbot Backend!"}
@@ -90,6 +86,4 @@ def run_manual_database_setup():
     except Exception as e:
         error_message = f"An error occurred during manual setup: {e}"
         print(error_message)
-        raise HTTPException(status_code=500, detail=error_message)???
-
-?
+        raise HTTPException(status_code=500, detail=error_message)
