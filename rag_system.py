@@ -1,4 +1,4 @@
-# rag_system.py (Final Version - Reverting to DATABASE_URL)
+# rag_system.py (Final Version - Force Host Override)
 import os
 import psycopg2
 from pgvector.psycopg2 import register_vector
@@ -15,24 +15,39 @@ except KeyError:
 
 def get_db_connection():
     """
-    Connects using ONLY the DATABASE_URL environment variable.
-    This relies on the variable being correctly set in Railway (via Raw Editor).
+    Connects using DATABASE_URL but explicitly overrides the host
+    with PGHOST to force network connection.
     """
     conn_string = os.environ.get("DATABASE_URL")
+    db_host = os.environ.get("PGHOST") # Get the Railway-provided host
+
     if not conn_string:
         raise ValueError("FATAL ERROR: DATABASE_URL environment variable is not set.")
+    if not db_host:
+         raise ValueError("FATAL ERROR: PGHOST environment variable is not set by Railway.")
+
     try:
-        conn = psycopg2.connect(conn_string)
+        # Connect using the full URL, BUT force the host
+        conn = psycopg2.connect(conn_string, host=db_host)
         register_vector(conn)
-        print("Successfully connected to database using DATABASE_URL.")
+        print(f"Successfully connected to database using forced host: {db_host}")
         return conn
     except psycopg2.OperationalError as e:
-        print(f"!!! FATAL ERROR: Could not connect to database using DATABASE_URL.")
+        print(f"!!! FATAL ERROR: Could not connect to database even with forced host.")
+        print(f"Host forced: {db_host}")
         print(f"Error details: {e}")
         raise e
+    except ValueError as e:
+         print(f"!!! FATAL ERROR: {e}")
+         raise e
 
 # --- ??????????????? rag_system.py (setup_database, add_reel_to_db, query_vector_db) ---
 # --- ????????????????? ???????????? ---
+def setup_database(): ... # (????????)
+def add_reel_to_db(reel: ReelData): ... # (????????)
+def query_vector_db(query_text: str) -> List[ReelData]: ... # (????????)
+
+# --- ???????? setup_database ---
 def setup_database():
     print("Attempting to set up database table...")
     conn = None
@@ -59,6 +74,7 @@ def setup_database():
         if conn:
             conn.close()
 
+# --- ???????? add_reel_to_db ---
 def add_reel_to_db(reel: ReelData):
     if not embedding_model: return
     conn = None
@@ -83,6 +99,7 @@ def add_reel_to_db(reel: ReelData):
         if conn:
             conn.close()
 
+# --- ???????? query_vector_db ---
 def query_vector_db(query_text: str) -> List[ReelData]:
     if not embedding_model: return []
     conn = None
