@@ -1,6 +1,7 @@
-# rag_system.py (Upgraded with SQLAlchemy)
+# rag_system.py (Final Version - Reverting to DATABASE_URL)
 import os
-from sqlalchemy import create_engine, text
+import psycopg2
+from pgvector.psycopg2 import register_vector
 import google.generativeai as genai
 from typing import List
 from models import ReelData
@@ -12,29 +13,35 @@ except KeyError:
     print("!!! FATAL ERROR: GOOGLE_API_KEY environment variable not set.")
     embedding_model = None
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("FATAL ERROR: DATABASE_URL environment variable is not set.")
-
-# Create a reusable engine
-engine = create_engine(DATABASE_URL)
-
 def get_db_connection():
-    """Gets a connection from the SQLAlchemy engine."""
+    """
+    Connects using ONLY the DATABASE_URL environment variable.
+    This relies on the variable being correctly set in Railway (via Raw Editor).
+    """
+    conn_string = os.environ.get("DATABASE_URL")
+    if not conn_string:
+        raise ValueError("FATAL ERROR: DATABASE_URL environment variable is not set.")
     try:
-        conn = engine.connect()
-        print("Successfully connected to database using SQLAlchemy.")
+        conn = psycopg2.connect(conn_string)
+        register_vector(conn)
+        print("Successfully connected to database using DATABASE_URL.")
         return conn
-    except Exception as e:
-        print(f"!!! FATAL ERROR: Could not connect to database using SQLAlchemy.")
+    except psycopg2.OperationalError as e:
+        print(f"!!! FATAL ERROR: Could not connect to database using DATABASE_URL.")
+        # Print URL without password for debugging connection string format issues
+        safe_conn_string = conn_string[:conn_string.find('@')] if '@' in conn_string else conn_string
+        print(f"Connection String Used (Check format): {safe_conn_string}...") 
         print(f"Error details: {e}")
         raise e
 
 def setup_database():
     print("Attempting to set up database table...")
-    with get_db_connection() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        conn.execute(text("""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS reels (
             id SERIAL PRIMARY KEY,
             url VARCHAR(255) UNIQUE NOT NULL,
@@ -42,51 +49,58 @@ def setup_database():
             quality_score FLOAT,
             embedding VECTOR(768)
         );
-        """))
+        """)
         conn.commit()
+        cursor.close()
         print("Database table 'reels' checked/created successfully.")
+    except Exception as e:
+        print(f"Error during database setup: {e}")
+        raise e # Reraise to see in Railway logs
+    finally:
+        if conn:
+            conn.close()
 
 def add_reel_to_db(reel: ReelData):
     if not embedding_model: return
-
-    embedding_list = genai.embed_content(
-        model=embedding_model,
-        content=reel.description,
-        task_type="RETRIEVAL_DOCUMENT"
-    )["embedding"]
-
-    # pgvector expects a string representation of the vector
-    embedding_str = str(embedding_list)
-
-    with get_db_connection() as conn:
-        # Use text() for query and bind parameters
-        stmt = text("""
-        INSERT INTO reels (url, description, quality_score, embedding)
-        VALUES (:url, :description, :quality_score, :embedding)
-        ON CONFLICT (url) DO NOTHING;
-        """)
-        conn.execute(stmt, {
-            "url": reel.url, 
-            "description": reel.description, 
-            "quality_score": reel.quality_score, 
-            "embedding": embedding_str
-        })
+    conn = None
+    try:
+        embedding = genai.embed_content(model=embedding_model, content=reel.description, task_type="RETRIEVAL_DOCUMENT")["embedding"]
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO reels (url, description, quality_score, embedding)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (url) DO NOTHING;
+            """,
+            (reel.url, reel.description, reel.quality_score, str(embedding)) # Convert embedding list to string for pgvector
+        )
         conn.commit()
+        cursor.close()
         print(f"Successfully added/skipped reel: {reel.url}")
+    except Exception as e:
+        print(f"Error adding reel {reel.url} to DB: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 def query_vector_db(query_text: str) -> List[ReelData]:
     if not embedding_model: return []
-
-    query_embedding_list = genai.embed_content(
-        model=embedding_model,
-        content=query_text,
-        task_type="RETRIEVAL_QUERY"
-    )["embedding"]
-
-    embedding_str = str(query_embedding_list)
-
-    with get_db_connection() as conn:
-        stmt = text("SELECT url, description, quality_score FROM reels ORDER BY embedding <-> :embedding LIMIT 5;")
-        result = conn.execute(stmt, {"embedding": embedding_str})
-        results = result.fetchall()
+    conn = None
+    try:
+        query_embedding = genai.embed_content(model=embedding_model, content=query_text, task_type="RETRIEVAL_QUERY")["embedding"]
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT url, description, quality_score FROM reels ORDER BY embedding <-> %s::vector LIMIT 5;",
+            (str(query_embedding),) # Convert embedding list to string for pgvector
+        )
+        results = cursor.fetchall()
+        cursor.close()
         return [ReelData(url=row[0], description=row[1], quality_score=row[2]) for row in results]
+    except Exception as e:
+        print(f"Error querying vector DB: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
